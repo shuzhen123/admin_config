@@ -1,0 +1,78 @@
+#使用 docker 作为运行环境
+image: docker:latest
+
+#services:
+#  - docker:dind
+
+variables:
+  DOCKER_DRIVER: overlay
+#  SPRING_PROFILES_ACTIVE: gitlab-ci
+#  SPRING_PROFILES_ACTIVE: dev
+
+#services:
+#- redis:3.2
+#  - mysql:5.7
+
+#connect:
+#  # Connect to PostgreSQL database as user postgres, without password
+#  image: redis
+#  only:
+#  #    - master
+#  - tags
+#  when: on_success
+#  script:
+#  - redis-cli -h redis PING
+
+stages:
+  - test
+  - build
+  - package
+#  - deploy
+
+maven-test:
+  image: maven:3-jdk-8
+  stage: test
+  only:
+  #    - master
+    - tags
+  when: on_success
+  tags:
+  #    - shell
+  script:
+    - mvn test -Dspring.profiles.active=test && cat target/site/jacoco/index.html
+  artifacts:
+      paths:
+        - target/site/jacoco/*
+      expire_in: 1 weeks and 1 days
+
+maven-build:
+# docker 拉取 image 作为环境
+  image: maven:3-jdk-8
+  stage: build
+  only:
+  # - master
+    - tags
+  when: on_success
+#  tags:
+#    - shell
+  script:
+    - mvn clean package -Ptest -Dmaven.test.skip=true
+  artifacts:
+    paths:
+      - target/*.jar
+    expire_in: 1 weeks and 1 days
+
+docker-build:
+  stage: package
+  only:
+#    - master
+    - tags
+  when: on_success
+  tags:
+    - shell
+  script:
+    - docker build -t registry.docued.com/8xx/8xx-config:"$CI_COMMIT_TAG" .
+    - docker login -u guest -p "$DOCKER_HARBOR_PASS_GUEST" registry.docued.com
+    - docker push registry.docued.com/8xx/8xx-config:"$CI_COMMIT_TAG"
+    - docker rmi registry.docued.com/8xx/8xx-config:"$CI_COMMIT_TAG"
+
